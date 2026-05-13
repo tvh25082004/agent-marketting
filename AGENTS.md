@@ -85,6 +85,50 @@ npm install -g 9router
 # Khuyến nghị: Gemini CLI (free), GitHub Copilot (free edu), AntiGravity
 ```
 
+## Video Production Studio (Face Swap + Lip Sync)
+
+### Web UI (recommended)
+```bash
+./run_server.sh
+# Frontend: http://localhost:3000 (tab Studio)
+# Backend:  http://localhost:8000
+```
+
+### App Flow
+1. **Studio Tab** - Upload/select image, video, audio → click "Generate Video"
+2. **Batch Mode** - Toggle on → process all audios with same image+video
+3. **Chat Tab** - Agent-based pipeline with LLM planning
+4. **Videos Tab** - View all generated videos
+
+### CLI Automation
+```bash
+# Single video
+python3 auto_pipeline.py --image input/input.jpeg --video input/videoinput.mp4 --audio input/song.mp3
+
+# Batch all audios
+python3 auto_pipeline.py --batch --image input/input.jpeg --video input/videoinput.mp4
+
+# Dry run (show plan)
+python3 auto_pipeline.py --batch --dry-run
+```
+
+### Direct Face Swap CLI
+```bash
+python3 backend/app/tools/faceswap_direct.py --source input/input.jpeg --target input/videoinput.mp4 --output output/videos/swapped.mp4
+```
+
+### API Endpoints (new)
+- `POST /api/agents/upload/image` - Upload image
+- `POST /api/agents/upload/audio` - Upload audio  
+- `POST /api/agents/upload/video` - Upload video
+- `POST /api/agents/process` - Direct process (no LLM)
+- `POST /api/agents/batch` - Batch process all audios
+
+### Pipeline Steps (auto_pipeline.py)
+1. **Face Swap** - InsightFace (buffalo_l + inswapper_128)
+2. **Lip Sync** - Synthetic amplitude-based mouth animation
+3. **Audio Replacement** - FFmpeg replace audio track
+
 ## Monitoring
 - Langfuse for LLM observability
 - Real-time token/cost tracking

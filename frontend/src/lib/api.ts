@@ -5,6 +5,10 @@ import type {
   VideoInfo,
   ScheduleConfig,
   FeedbackData,
+  InputAssets,
+  UploadResponse,
+  ProcessResponse,
+  BatchProcessResponse,
 } from '@/types'
 
 const API_BASE = '/api'
@@ -21,7 +25,6 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
-// Map backend snake_case → frontend camelCase
 function mapTaskStatus(raw: Record<string, unknown>): TaskStatus {
   return {
     taskId: (raw.task_id ?? raw.taskId) as string,
@@ -106,6 +109,10 @@ export async function getVideos(): Promise<VideoInfo[]> {
   return raw.map(mapVideoInfo)
 }
 
+export async function getInputAssets(): Promise<InputAssets> {
+  return fetchApi('/agents/assets')
+}
+
 export async function getSchedule(): Promise<{ enabled: boolean; jobs: unknown[] }> {
   return fetchApi('/schedule')
 }
@@ -149,4 +156,71 @@ export async function pollTaskStatus(taskId: string, onUpdate: (task: TaskDetail
     }
   }
   poll()
+}
+
+// ── Upload API ─────────────────────────────────────────────────────
+
+export async function uploadImage(file: File): Promise<UploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_BASE}/agents/upload/image`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+  return res.json()
+}
+
+export async function uploadAudio(file: File): Promise<UploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_BASE}/agents/upload/audio`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+  return res.json()
+}
+
+export async function uploadVideo(file: File): Promise<UploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_BASE}/agents/upload/video`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+  return res.json()
+}
+
+// ── Direct Process API ─────────────────────────────────────────────
+
+export async function directProcess(
+  imagePath: string,
+  videoPath: string,
+  audioPath: string,
+): Promise<ProcessResponse> {
+  return fetchApi('/agents/process', {
+    method: 'POST',
+    body: JSON.stringify({
+      image_path: imagePath,
+      video_path: videoPath,
+      audio_path: audioPath,
+    }),
+  })
+}
+
+export async function batchProcess(
+  imagePath: string,
+  videoPath: string,
+): Promise<BatchProcessResponse> {
+  const form = new FormData()
+  form.append('image_path', imagePath)
+  form.append('video_path', videoPath)
+  const res = await fetch(`${API_BASE}/agents/batch`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) throw new Error(`Batch failed: ${res.status}`)
+  return res.json()
 }

@@ -23,6 +23,7 @@ class WorkflowState(TypedDict):
     crawled_song: Optional[Dict[str, Any]]
     audio_path: Optional[str]
     image_path: Optional[str]
+    reference_video: Optional[str]
     lyrics: Optional[str]
     lyrics_path: Optional[str]
 

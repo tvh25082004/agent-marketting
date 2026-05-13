@@ -102,3 +102,39 @@ class VideoResponse(BaseModel):
     status: str
     feedback_score: Optional[float] = None
     created_at: Optional[datetime.datetime] = None
+
+
+class UploadResponse(BaseModel):
+    filename: str
+    path: str
+    url: str
+    size: int
+    file_type: str
+
+
+class ProcessRequest(BaseModel):
+    image_path: str
+    video_path: str
+    audio_path: str
+
+
+class ProcessResponse(BaseModel):
+    task_id: str
+    status: str
+    video_url: Optional[str] = None
+    video_path: Optional[str] = None
+    message: Optional[str] = None
+
+
+class BatchJobResult(BaseModel):
+    audio_name: str
+    status: str
+    video_url: Optional[str] = None
+    video_path: Optional[str] = None
+
+
+class BatchProcessResponse(BaseModel):
+    task_id: str
+    status: str
+    total: int
+    results: List[BatchJobResult] = []

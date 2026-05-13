@@ -81,6 +81,48 @@ export interface FeedbackData {
   feedbackText?: string
 }
 
+export interface InputAsset {
+  name: string
+  path: string
+  size: number
+}
+
+export interface InputAssets {
+  audio: InputAsset[]
+  images: InputAsset[]
+  videos: InputAsset[]
+}
+
+export interface UploadResponse {
+  filename: string
+  path: string
+  url: string
+  size: number
+  fileType: string
+}
+
+export interface ProcessResponse {
+  taskId: string
+  status: string
+  videoUrl?: string
+  videoPath?: string
+  message?: string
+}
+
+export interface BatchJobResult {
+  audioName: string
+  status: string
+  videoUrl?: string
+  videoPath?: string
+}
+
+export interface BatchProcessResponse {
+  taskId: string
+  status: string
+  total: number
+  results: BatchJobResult[]
+}
+
 export type WorkflowStep =
   | 'crawl'
   | 'process_audio'

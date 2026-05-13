@@ -1,4 +1,6 @@
 import logging
+import os
+import re
 from typing import Optional
 from .base import BaseAgent
 
@@ -42,19 +44,35 @@ class SupervisorAgent(BaseAgent):
         return attempt < 3 and ("timeout" in error.lower() or "rate" in error.lower())
 
     def get_workflow_plan(self, user_message: str) -> dict:
+        deterministic_plan = self._deterministic_plan(user_message)
+        if deterministic_plan:
+            return deterministic_plan
+
         prompt = f"""Dựa vào yêu cầu của người dùng, hãy lập kế hoạch workflow:
 
 Yêu cầu: {user_message}
 
 Các loại workflow:
 - "full_music_video": Quy trình đầy đủ (crawl → audio → lyric → voice → video → lipsync → karaoke → render)
-- "lipsync_only": Chỉ chạy MuseTalk lip-sync (input ảnh + audio → output video)
+- "ai_dancing": Tạo video nhảy bằng AI dancing (input ảnh + audio + video mẫu → output video nhảy)
+- "lipsync_only": Chỉ chạy lip-sync nhanh
 
 Hãy trả về JSON với cấu trúc:
 {{
     "workflow_type": "full_music_video",
     "steps": ["crawl", "process_audio", "get_lyrics", "generate_voice", "create_video", "lipsync", "add_karaoke", "render"],
     "parameters": {{...}}
+}}
+
+Nếu user yêu cầu tạo video nhảy AI dancing với ảnh, audio, và video cụ thể (ví dụ: trong thư mục input), hãy trả về:
+{{
+    "workflow_type": "ai_dancing",
+    "steps": ["lipsync"],
+    "parameters": {{
+        "audio_path": "input/<tên-file-audio>",
+        "image_path": "input/<tên-file-ảnh>",
+        "reference_video": "input/<tên-file-video-mẫu>"
+    }}
 }}
 
 Nếu user muốn lip-sync nhanh, chỉ cần ảnh + audio:
@@ -64,5 +82,49 @@ Nếu user muốn lip-sync nhanh, chỉ cần ảnh + audio:
     "parameters": {{}}
 }}
 """
-        result = self.llm.invoke(prompt)
-        return self._parse_json(result.content)
+        try:
+            result = self.llm.invoke(prompt)
+            return self._parse_json(result.content)
+        except Exception as e:
+            logger.warning(f"Supervisor LLM planning failed, using fallback plan: {e}")
+            return {
+                "workflow_type": "full_music_video",
+                "steps": ["crawl", "process_audio", "get_lyrics", "generate_voice", "create_video", "lipsync", "add_karaoke", "render"],
+                "parameters": {},
+            }
+
+    def _deterministic_plan(self, user_message: str) -> Optional[dict]:
+        msg = user_message or ""
+        lowered = msg.lower()
+        wants_local_motion = any(
+            key in lowered
+            for key in ["ai dancing", "aidancing", "video nhảy", "nhảy ai", "input/", "videoinput"]
+        )
+        if not wants_local_motion:
+            return None
+
+        params = {
+            "audio_path": self._pick_path(msg, (".mp3", ".wav", ".m4a"), "input/test_30s.mp3"),
+            "image_path": self._pick_path(msg, (".jpg", ".jpeg", ".png", ".webp"), "input/input.jpeg"),
+            "reference_video": self._pick_path(msg, (".mp4", ".mov", ".mkv", ".webm"), "input/videoinput.mp4"),
+        }
+        return {
+            "workflow_type": "ai_dancing",
+            "steps": ["lipsync"],
+            "parameters": params,
+        }
+
+    @staticmethod
+    def _pick_path(message: str, extensions: tuple[str, ...], default_path: str) -> str:
+        normalized = message.replace("\\", "/")
+        for match in re.findall(r"input/[^\s,;]+", normalized):
+            cleaned = match.strip("\"'()[]{}")
+            if cleaned.lower().endswith(extensions):
+                return cleaned
+
+        input_dir = os.path.join(os.getcwd(), "input")
+        if os.path.isdir(input_dir):
+            for name in sorted(os.listdir(input_dir)):
+                if name.lower().endswith(extensions):
+                    return f"input/{name}"
+        return default_path

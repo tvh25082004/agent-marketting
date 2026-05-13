@@ -51,6 +51,17 @@ app.include_router(feedback.router)
 os.makedirs(settings.video_output_dir, exist_ok=True)
 app.mount("/api/videos", StaticFiles(directory=settings.video_output_dir), name="videos")
 
+# Mount static files for input/output assets
+_input_dir = os.path.join(os.path.dirname(settings.temp_dir), "..", "input")
+_input_dir = os.path.abspath(_input_dir)
+os.makedirs(_input_dir, exist_ok=True)
+app.mount("/static/input", StaticFiles(directory=_input_dir), name="static_input")
+
+_output_dir = os.path.join(os.path.dirname(settings.temp_dir), "..", "output")
+_output_dir = os.path.abspath(_output_dir)
+os.makedirs(_output_dir, exist_ok=True)
+app.mount("/static/output", StaticFiles(directory=_output_dir), name="static_output")
+
 
 @app.get("/api/health")
 async def health():

@@ -1,4 +1,4 @@
-import os, logging, json
+import os, logging, json, subprocess
 from typing import Dict, Any
 from .state import WorkflowState, AgentStep
 from ..agents.crawler_agent import CrawlerAgent
@@ -20,6 +20,20 @@ logger = logging.getLogger(__name__)
 # Path to the singer image (project root / input / input.jpeg)
 SINGER_IMAGE = os.path.join(os.path.dirname(os.path.dirname(settings.temp_dir)), "input", "input.jpeg")
 
+def get_media_duration(path: str | None) -> float | None:
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return float(result.stdout.strip())
+    except Exception:
+        return None
+
 
 def create_step(name, agent, status="running", inp=None, out=None, tokens=0, model=None, error=None):
     return AgentStep(step_name=name, agent_name=agent, status=status,
@@ -35,13 +49,29 @@ async def supervisor_node(state: WorkflowState) -> Dict[str, Any]:
 
     step_map = {
         "lipsync_only": "lipsync",
+        "ai_dancing": "lipsync",
         "full_music_video": "crawl",
     }
     current_step = step_map.get(wf_type, "crawl")
 
+    # Extract parameters if provided
+    params = plan.get("parameters", {})
+    audio_path = params.get("audio_path")
+    image_path = params.get("image_path")
+    reference_video = params.get("reference_video")
+
+    # Convert paths relative to project root if they start with input/
+    def resolve_path(p):
+        if p and p.startswith("input/"):
+            return os.path.join(os.path.dirname(os.path.dirname(settings.temp_dir)), p)
+        return p
+
     return {
         "workflow_type": wf_type,
         "current_step": current_step,
+        "audio_path": resolve_path(audio_path),
+        "image_path": resolve_path(image_path),
+        "reference_video": resolve_path(reference_video),
         "status": "running",
         "steps": [create_step("supervisor_plan", "supervisor", "completed",
                               inp={"message": state.get("human_message")},
@@ -154,11 +184,33 @@ async def lipsync_node(state: WorkflowState) -> Dict[str, Any]:
     result = agent.run({
         "image_path": state.get("image_path") or SINGER_IMAGE,
         "voice_path": state.get("voice_path") or state.get("audio_path"),
+        "reference_video": state.get("reference_video"),
     })
 
     ok = result["status"] == "completed"
+    lipsync_video_path = result.get("data", {}).get("lipsync_video_path")
+    wf_type = state.get("workflow_type")
+
+    if ok and wf_type == "ai_dancing":
+        final_path = lipsync_video_path
+        video_url = f"/api/videos/{os.path.basename(final_path)}" if final_path and os.path.exists(final_path) else None
+        duration = get_media_duration(final_path)
+        return {
+            "lipsync_video_path": lipsync_video_path,
+            "final_video_path": final_path,
+            "final_video_url": video_url,
+            "duration_seconds": duration,
+            "current_step": "completed",
+            "status": "completed",
+            "output_metadata": {"video_url": video_url},
+            "steps": [create_step("lipsync", "lipsync", result["status"],
+                                  out=result, tokens=agent.total_tokens,
+                                  model=agent.model_name or settings.default_model,
+                                  error=result.get("error"))],
+        }
+
     return {
-        "lipsync_video_path": result.get("data", {}).get("lipsync_video_path"),
+        "lipsync_video_path": lipsync_video_path,
         "current_step": "add_karaoke" if ok else "failed",
         "status": "running" if ok else "failed",
         "error_message": None if ok else result.get("error"),

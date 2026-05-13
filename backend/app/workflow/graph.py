@@ -145,9 +145,10 @@ compiled_workflow = create_workflow().compile()
 
 import asyncio
 from ..database import async_session
-from ..models import AgentTask, AgentStep, AgentTaskStatus
+from ..models import AgentTask, AgentStep, AgentTaskStatus, GeneratedVideo
 from sqlalchemy import select, update
 import datetime
+import os
 
 async def run_workflow(task_id: str, message: str,
                        model: str = None, scheduled: bool = False) -> Dict[str, Any]:
@@ -216,6 +217,24 @@ async def run_workflow(task_id: str, message: str,
                     completed_at=datetime.datetime.utcnow()
                 )
             )
+
+            final_path = result.get("final_video_path")
+            final_url = result.get("final_video_url")
+            if db_status == AgentTaskStatus.COMPLETED and final_path and os.path.exists(final_path):
+                existing = await session.execute(
+                    select(GeneratedVideo).where(GeneratedVideo.task_id == task_id)
+                )
+                if not existing.scalar_one_or_none():
+                    workflow_type = result.get("workflow_type") or "music_video"
+                    title = "AI Dancing Lao MV" if workflow_type == "ai_dancing" else "Lao Music Video"
+                    session.add(GeneratedVideo(
+                        task_id=task_id,
+                        title=title,
+                        video_path=final_path,
+                        video_url=final_url or f"/api/videos/{os.path.basename(final_path)}",
+                        duration_seconds=result.get("duration_seconds"),
+                        status="completed",
+                    ))
             await session.commit()
 
         return result
